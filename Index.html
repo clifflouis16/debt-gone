@@ -15,7 +15,7 @@
   <!-- Babel Standalone for JSX -->
   <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
   
-  <!-- Lucide Icons - PINNED VERSION (fixes white screen bug) -->
+  <!-- Lucide Icons - PINNED to 0.263.1 (DO NOT change to @latest) -->
   <script src="https://unpkg.com/lucide@0.263.1/dist/umd/lucide.js"></script>
   
   <style>
@@ -38,12 +38,10 @@
       animation-name: slideIn;
     }
     
-    /* Safe area padding for mobile devices */
     .pb-safe {
       padding-bottom: env(safe-area-inset-bottom);
     }
     
-    /* Smooth scrolling */
     html {
       scroll-behavior: smooth;
     }
@@ -56,97 +54,40 @@
     const { useState, useEffect, useMemo, useCallback, memo } = React;
     const { Plus, TrendingDown, Wallet, ChevronDown, ChevronUp, Download, Upload, DollarSign, AlertCircle, Target, Zap, History, Calculator, BarChart3, Flame, X, Edit2 } = lucide;
 
-    // ============================================================================
-    // UTILITY FUNCTIONS - EXACT FINANCIAL CALCULATIONS
-    // ============================================================================
-
     const formatCurrency = (amount) => {
       const num = parseFloat(amount) || 0;
-      return num.toLocaleString('en-US', { 
-        minimumFractionDigits: 2, 
-        maximumFractionDigits: 2 
-      });
+      return num.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
     };
 
     const calculateMinPayment = (balance, rate, issuer = 'chase') => {
       const balanceNum = parseFloat(balance) || 0;
       const aprNum = parseFloat(rate) || 0;
-      
       if (balanceNum === 0) return '0.00';
-      
       const monthlyInterestRate = (aprNum / 100) / 12;
       const monthlyInterest = balanceNum * monthlyInterestRate;
-
-      if (issuer === 'chase') {
-        const percentagePlusInterest = (balanceNum * 0.01) + monthlyInterest;
-        return Math.max(40, percentagePlusInterest).toFixed(2);
-      }
-      
-      if (issuer === 'navyfed') {
-        if (balanceNum < 20) return balanceNum.toFixed(2);
-        const onePercent = Math.ceil(balanceNum * 0.01);
-        return Math.max(20, onePercent + monthlyInterest).toFixed(2);
-      }
-      
-      if (issuer === 'discover') {
-        const twoPercent = balanceNum * 0.02;
-        return Math.min(Math.max(35, twoPercent), balanceNum).toFixed(2);
-      }
-      
+      if (issuer === 'chase') { const percentagePlusInterest = (balanceNum * 0.01) + monthlyInterest; return Math.max(40, percentagePlusInterest).toFixed(2); }
+      if (issuer === 'navyfed') { if (balanceNum < 20) return balanceNum.toFixed(2); const onePercent = Math.ceil(balanceNum * 0.01); return Math.max(20, onePercent + monthlyInterest).toFixed(2); }
+      if (issuer === 'discover') { const twoPercent = balanceNum * 0.02; return Math.min(Math.max(35, twoPercent), balanceNum).toFixed(2); }
       return Math.max(balanceNum * 0.02, 25).toFixed(2);
     };
 
     const calculatePayoffTimeline = (cards, monthlyPayment) => {
       if (!cards.length || monthlyPayment <= 0) return null;
-      
       const simulatePayoff = (sortedCards) => {
-        let months = 0;
-        let totalInterest = 0;
+        let months = 0, totalInterest = 0;
         const cardsClone = sortedCards.map(c => ({ ...c }));
-        
         while (cardsClone.some(c => c.balance > 0.01) && months < 600) {
           months++;
           let remainingPayment = monthlyPayment;
-          
-          for (let card of cardsClone) {
-            if (card.balance > 0) {
-              const monthlyInterestRate = (card.apr / 100) / 12;
-              const interest = card.balance * monthlyInterestRate;
-              card.balance += interest;
-              totalInterest += interest;
-            }
-          }
-          
-          for (let card of cardsClone) {
-            if (card.balance > 0 && remainingPayment > 0) {
-              const payment = Math.min(remainingPayment, card.balance);
-              card.balance -= payment;
-              remainingPayment -= payment;
-              
-              if (card.balance < 0.01) card.balance = 0;
-            }
-          }
-          
+          for (let card of cardsClone) { if (card.balance > 0) { const interest = card.balance * (card.apr / 100) / 12; card.balance += interest; totalInterest += interest; } }
+          for (let card of cardsClone) { if (card.balance > 0 && remainingPayment > 0) { const payment = Math.min(remainingPayment, card.balance); card.balance -= payment; remainingPayment -= payment; if (card.balance < 0.01) card.balance = 0; } }
           if (remainingPayment === monthlyPayment) break;
         }
-        
         return { months, totalInterest };
       };
-      
-      const avalancheCards = cards.map(c => ({ 
-        balance: parseFloat(c.balance), 
-        apr: parseFloat(c.apr) 
-      })).sort((a, b) => b.apr - a.apr);
-      
-      const snowballCards = cards.map(c => ({ 
-        balance: parseFloat(c.balance), 
-        apr: parseFloat(c.apr) 
-      })).sort((a, b) => a.balance - b.balance);
-      
-      return {
-        avalanche: simulatePayoff(avalancheCards),
-        snowball: simulatePayoff(snowballCards)
-      };
+      const avalancheCards = cards.map(c => ({ balance: parseFloat(c.balance), apr: parseFloat(c.apr) })).sort((a, b) => b.apr - a.apr);
+      const snowballCards = cards.map(c => ({ balance: parseFloat(c.balance), apr: parseFloat(c.apr) })).sort((a, b) => a.balance - b.balance);
+      return { avalanche: simulatePayoff(avalancheCards), snowball: simulatePayoff(snowballCards) };
     };
 
     const getCardSymbol = (index) => ['●', '■', '▲', '◆', '★', '♦', '▼', '◉', '◈', '◇'][index % 10];
@@ -167,115 +108,43 @@
       return colors[index % colors.length];
     };
 
-    const validateNumber = (value, min = 0) => {
-      const num = parseFloat(value);
-      return !isNaN(num) && num >= min;
-    };
+    const validateNumber = (value, min = 0) => { const num = parseFloat(value); return !isNaN(num) && num >= min; };
 
     const useLocalStorage = (key, initialValue) => {
       const [storedValue, setStoredValue] = useState(() => {
-        try {
-          const item = window.localStorage.getItem(key);
-          return item ? JSON.parse(item) : initialValue;
-        } catch {
-          return initialValue;
-        }
+        try { const item = window.localStorage.getItem(key); return item ? JSON.parse(item) : initialValue; } catch { return initialValue; }
       });
-
       const setValue = useCallback((value) => {
-        try {
-          const valueToStore = value instanceof Function ? value(storedValue) : value;
-          setStoredValue(valueToStore);
-          window.localStorage.setItem(key, JSON.stringify(valueToStore));
-        } catch (error) {
-          console.error(`Error saving ${key}:`, error);
-        }
+        try { const valueToStore = value instanceof Function ? value(storedValue) : value; setStoredValue(valueToStore); window.localStorage.setItem(key, JSON.stringify(valueToStore)); } catch (error) { console.error(error); }
       }, [key, storedValue]);
-
       return [storedValue, setValue];
     };
 
-    // ============================================================================
-    // UI COMPONENTS
-    // ============================================================================
-
     const Icon = ({ name, size = 24, className = "" }) => {
-      useEffect(() => {
-        lucide.createIcons();
-      }, []);
-      
-      return React.createElement('i', {
-        'data-lucide': name,
-        className: className,
-        style: { width: size, height: size }
-      });
+      useEffect(() => { lucide.createIcons(); }, []);
+      return React.createElement('i', { 'data-lucide': name, className: className, style: { width: size, height: size } });
     };
 
     const BankingInput = memo(({ value, onChange, onEnter, label, placeholder = "0.00", className = "" }) => {
       const [rawCents, setRawCents] = useState(0);
       const [isFocused, setIsFocused] = useState(false);
-
-      useEffect(() => {
-        if (!isFocused) {
-          const cents = Math.round(parseFloat(value || 0) * 100);
-          setRawCents(cents);
-        }
-      }, [value, isFocused]);
-
-      const formatDisplay = (cents) => {
-        const dollars = Math.floor(cents / 100);
-        const centsRemainder = cents % 100;
-        return `${dollars}.${centsRemainder.toString().padStart(2, '0')}`;
-      };
-
+      useEffect(() => { if (!isFocused) { const cents = Math.round(parseFloat(value || 0) * 100); setRawCents(cents); } }, [value, isFocused]);
+      const formatDisplay = (cents) => { const dollars = Math.floor(cents / 100); const centsRemainder = cents % 100; return `${dollars}.${centsRemainder.toString().padStart(2, '0')}`; };
       const handleKeyDown = (e) => {
         if (e.key === 'Tab') return;
         e.preventDefault();
-        if (e.key >= '0' && e.key <= '9') {
-          const newCents = rawCents * 10 + parseInt(e.key);
-          setRawCents(newCents);
-          onChange(formatDisplay(newCents));
-        } else if (e.key === 'Backspace' || e.key === 'Delete') {
-          const newCents = Math.floor(rawCents / 10);
-          setRawCents(newCents);
-          onChange(formatDisplay(newCents));
-        } else if (e.key === 'Enter' && onEnter) {
-          onEnter();
-          e.target.blur();
-        } else if (e.key === 'Escape') {
-          e.target.blur();
-        }
+        if (e.key >= '0' && e.key <= '9') { const newCents = rawCents * 10 + parseInt(e.key); setRawCents(newCents); onChange(formatDisplay(newCents)); }
+        else if (e.key === 'Backspace' || e.key === 'Delete') { const newCents = Math.floor(rawCents / 10); setRawCents(newCents); onChange(formatDisplay(newCents)); }
+        else if (e.key === 'Enter' && onEnter) { onEnter(); e.target.blur(); }
+        else if (e.key === 'Escape') { e.target.blur(); }
       };
-
-      const handleFocus = (e) => {
-        setIsFocused(true);
-        setRawCents(0);
-        onChange('0.00');
-        e.target.setAttribute('inputmode', 'numeric');
-        e.target.setAttribute('pattern', '[0-9]*');
-      };
-
-      const handleBlur = () => { setIsFocused(false); };
-      const displayValue = formatDisplay(rawCents);
-
+      const handleFocus = (e) => { setIsFocused(true); setRawCents(0); onChange('0.00'); e.target.setAttribute('inputmode', 'numeric'); e.target.setAttribute('pattern', '[0-9]*'); };
       return (
         <div className="relative">
           {label && <label className="text-xs text-slate-400 block mb-1">{label}</label>}
           <div className="relative">
             <span className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-xl font-bold pointer-events-none">$</span>
-            <input
-              type="tel"
-              inputMode="numeric"
-              pattern="[0-9]*"
-              value={displayValue}
-              onKeyDown={handleKeyDown}
-              onInput={(e) => e.preventDefault()}
-              onFocus={handleFocus}
-              onBlur={handleBlur}
-              placeholder={placeholder}
-              autoComplete="off"
-              className={`w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 pl-8 py-2 text-white font-mono text-xl font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 ${className}`}
-            />
+            <input type="tel" inputMode="numeric" pattern="[0-9]*" value={formatDisplay(rawCents)} onKeyDown={handleKeyDown} onInput={(e) => e.preventDefault()} onFocus={handleFocus} onBlur={() => setIsFocused(false)} placeholder={placeholder} autoComplete="off" className={`w-full bg-slate-900/50 border border-slate-700 rounded-lg px-3 pl-8 py-2 text-white font-mono text-xl font-bold focus:outline-none focus:ring-2 focus:ring-blue-500 ${className}`} />
           </div>
         </div>
       );
@@ -297,9 +166,7 @@
           <div className="bg-slate-800 rounded-2xl shadow-2xl border border-slate-700 w-full h-full sm:w-auto sm:h-auto sm:max-w-2xl sm:max-h-[90vh] overflow-y-auto" onClick={(e) => e.stopPropagation()}>
             <div className="sticky top-0 bg-slate-800 z-10 flex items-center justify-between p-4 sm:p-6 border-b border-slate-700">
               <h2 className="text-lg sm:text-xl font-bold text-white">{title}</h2>
-              <button onClick={onClose} className="text-slate-400 hover:text-white p-2 rounded-lg transition-colors">
-                <Icon name="x" size={24} />
-              </button>
+              <button onClick={onClose} className="text-slate-400 hover:text-white p-2 rounded-lg transition-colors"><Icon name="x" size={24} /></button>
             </div>
             {children}
           </div>
@@ -307,35 +174,20 @@
       );
     });
 
-    // ============================================================================
-    // MODALS
-    // ============================================================================
-
     const QuickEditModal = memo(({ isOpen, onClose, cards, onUpdateBalances }) => {
       const [editedBalances, setEditedBalances] = useState({});
       const [charges, setCharges] = useState({});
-
       useEffect(() => {
         if (isOpen) {
           const balances = {}, newCharges = {};
-          cards.forEach(card => {
-            balances[card.id] = card.balance;
-            newCharges[card.id] = '';
-          });
-          setEditedBalances(balances);
-          setCharges(newCharges);
+          cards.forEach(card => { balances[card.id] = card.balance; newCharges[card.id] = ''; });
+          setEditedBalances(balances); setCharges(newCharges);
         }
       }, [isOpen, cards]);
-
       const handleAddCharge = useCallback((cardId) => {
         const charge = parseFloat(charges[cardId]) || 0;
-        if (charge > 0) {
-          const currentBalance = parseFloat(editedBalances[cardId]) || 0;
-          setEditedBalances(prev => ({ ...prev, [cardId]: (currentBalance + charge).toFixed(2) }));
-          setCharges(prev => ({ ...prev, [cardId]: '' }));
-        }
+        if (charge > 0) { setEditedBalances(prev => ({ ...prev, [cardId]: (parseFloat(prev[cardId] || 0) + charge).toFixed(2) })); setCharges(prev => ({ ...prev, [cardId]: '' })); }
       }, [charges, editedBalances]);
-
       return (
         <Modal isOpen={isOpen} onClose={onClose} title="Update Balances">
           <div className="p-4 sm:p-6">
@@ -344,27 +196,11 @@
                 <div key={card.id} className="bg-slate-900/50 rounded-xl p-4 border border-slate-700">
                   <div className="font-semibold text-white mb-3">{card.name}</div>
                   <div className="grid grid-cols-2 gap-3 mb-3">
-                    <div>
-                      <label className="text-xs text-slate-400 block mb-1">Current</label>
-                      <div className="text-slate-300">${parseFloat(card.balance).toFixed(2)}</div>
-                    </div>
-                    <div>
-                      <BankingInput
-                        label="New Balance"
-                        value={editedBalances[card.id] || '0.00'}
-                        onChange={(val) => setEditedBalances(prev => ({ ...prev, [card.id]: val }))}
-                        onEnter={() => { onUpdateBalances(editedBalances); onClose(); }}
-                      />
-                    </div>
+                    <div><label className="text-xs text-slate-400 block mb-1">Current</label><div className="text-slate-300">${parseFloat(card.balance).toFixed(2)}</div></div>
+                    <div><BankingInput label="New Balance" value={editedBalances[card.id] || '0.00'} onChange={(val) => setEditedBalances(prev => ({ ...prev, [card.id]: val }))} onEnter={() => { onUpdateBalances(editedBalances); onClose(); }} /></div>
                   </div>
                   <div className="pt-3 border-t border-slate-700/50">
-                    <BankingInput
-                      label="Add Charge"
-                      value={charges[card.id] || '0.00'}
-                      onChange={(val) => setCharges(prev => ({ ...prev, [card.id]: val }))}
-                      onEnter={() => handleAddCharge(card.id)}
-                      className="text-sm"
-                    />
+                    <BankingInput label="Add Charge" value={charges[card.id] || '0.00'} onChange={(val) => setCharges(prev => ({ ...prev, [card.id]: val }))} onEnter={() => handleAddCharge(card.id)} className="text-sm" />
                     <button onClick={() => handleAddCharge(card.id)} className="w-full mt-2 bg-amber-600 hover:bg-amber-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors text-sm">+ Add Charge</button>
                   </div>
                 </div>
@@ -384,32 +220,9 @@
       const [newAvailableFunds, setNewAvailableFunds] = useState('');
       const [addToSavings, setAddToSavings] = useState('');
       const [addToAvailable, setAddToAvailable] = useState('');
-
-      useEffect(() => {
-        if (isOpen) {
-          setNewSavingsGoal(currentFunds);
-          setNewAvailableFunds(availableFunds);
-          setAddToSavings('');
-          setAddToAvailable('');
-        }
-      }, [isOpen, currentFunds, availableFunds]);
-
-      const handleAddToSavings = useCallback(() => {
-        const toAdd = parseFloat(addToSavings) || 0;
-        if (toAdd > 0) {
-          setNewSavingsGoal(((parseFloat(newSavingsGoal) || 0) + toAdd).toFixed(2));
-          setAddToSavings('');
-        }
-      }, [addToSavings, newSavingsGoal]);
-
-      const handleAddToAvailable = useCallback(() => {
-        const toAdd = parseFloat(addToAvailable) || 0;
-        if (toAdd > 0) {
-          setNewAvailableFunds(((parseFloat(newAvailableFunds) || 0) + toAdd).toFixed(2));
-          setAddToAvailable('');
-        }
-      }, [addToAvailable, newAvailableFunds]);
-
+      useEffect(() => { if (isOpen) { setNewSavingsGoal(currentFunds); setNewAvailableFunds(availableFunds); setAddToSavings(''); setAddToAvailable(''); } }, [isOpen, currentFunds, availableFunds]);
+      const handleAddToSavings = useCallback(() => { const toAdd = parseFloat(addToSavings) || 0; if (toAdd > 0) { setNewSavingsGoal(((parseFloat(newSavingsGoal) || 0) + toAdd).toFixed(2)); setAddToSavings(''); } }, [addToSavings, newSavingsGoal]);
+      const handleAddToAvailable = useCallback(() => { const toAdd = parseFloat(addToAvailable) || 0; if (toAdd > 0) { setNewAvailableFunds(((parseFloat(newAvailableFunds) || 0) + toAdd).toFixed(2)); setAddToAvailable(''); } }, [addToAvailable, newAvailableFunds]);
       if (!isOpen) return null;
       return (
         <div className="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
@@ -418,34 +231,32 @@
               <h2 className="text-xl font-bold text-white">Manage Account Balance</h2>
               <button onClick={onClose} className="text-slate-400 hover:text-white p-2 rounded-lg transition-colors"><Icon name="x" size={24} /></button>
             </div>
-            <div className="p-6">
-              <div className="space-y-6">
-                <div>
-                  <label className="text-sm text-slate-300 mb-2 block font-semibold">For Debt Payment</label>
-                  <div className="text-xs text-slate-400 mb-2">Current: ${parseFloat(currentFunds).toFixed(2)}</div>
-                  <BankingInput value={newSavingsGoal} onChange={(val) => setNewSavingsGoal(val)} className="focus:ring-blue-500" />
-                  <div className="mt-3 pt-3 border-t border-slate-700/50">
-                    <BankingInput label="+ Add More" value={addToSavings} onChange={(val) => setAddToSavings(val)} onEnter={handleAddToSavings} className="text-sm focus:ring-blue-500" />
-                    <button onClick={handleAddToSavings} className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors text-sm">+ Add</button>
-                  </div>
-                </div>
-                <div>
-                  <label className="text-sm text-slate-300 mb-2 block font-semibold">Total Available Funds</label>
-                  <div className="text-xs text-slate-400 mb-2">Current: ${parseFloat(availableFunds).toFixed(2)}</div>
-                  <BankingInput value={newAvailableFunds} onChange={(val) => setNewAvailableFunds(val)} className="focus:ring-teal-500" />
-                  <div className="mt-3 pt-3 border-t border-slate-700/50">
-                    <BankingInput label="+ Add More" value={addToAvailable} onChange={(val) => setAddToAvailable(val)} onEnter={handleAddToAvailable} className="text-sm focus:ring-teal-500" />
-                    <button onClick={handleAddToAvailable} className="w-full mt-2 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors text-sm">+ Add</button>
-                  </div>
-                </div>
-                <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
-                  <div className="flex items-center justify-between">
-                    <span className="text-sm text-emerald-300 font-semibold">Free to Spend</span>
-                    <span className="text-lg font-bold text-emerald-400">${Math.max(0, (parseFloat(newAvailableFunds) || 0) - (parseFloat(newSavingsGoal) || 0)).toFixed(2)}</span>
-                  </div>
+            <div className="p-6 space-y-6">
+              <div>
+                <label className="text-sm text-slate-300 mb-2 block font-semibold">For Debt Payment</label>
+                <div className="text-xs text-slate-400 mb-2">Current: ${parseFloat(currentFunds).toFixed(2)}</div>
+                <BankingInput value={newSavingsGoal} onChange={(val) => setNewSavingsGoal(val)} className="focus:ring-blue-500" />
+                <div className="mt-3 pt-3 border-t border-slate-700/50">
+                  <BankingInput label="+ Add More" value={addToSavings} onChange={(val) => setAddToSavings(val)} onEnter={handleAddToSavings} className="text-sm focus:ring-blue-500" />
+                  <button onClick={handleAddToSavings} className="w-full mt-2 bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors text-sm">+ Add</button>
                 </div>
               </div>
-              <div className="flex gap-3 mt-6">
+              <div>
+                <label className="text-sm text-slate-300 mb-2 block font-semibold">Total Available Funds</label>
+                <div className="text-xs text-slate-400 mb-2">Current: ${parseFloat(availableFunds).toFixed(2)}</div>
+                <BankingInput value={newAvailableFunds} onChange={(val) => setNewAvailableFunds(val)} className="focus:ring-teal-500" />
+                <div className="mt-3 pt-3 border-t border-slate-700/50">
+                  <BankingInput label="+ Add More" value={addToAvailable} onChange={(val) => setAddToAvailable(val)} onEnter={handleAddToAvailable} className="text-sm focus:ring-teal-500" />
+                  <button onClick={handleAddToAvailable} className="w-full mt-2 bg-teal-600 hover:bg-teal-700 text-white px-4 py-2 rounded-lg font-semibold transition-colors text-sm">+ Add</button>
+                </div>
+              </div>
+              <div className="p-4 bg-emerald-500/10 border border-emerald-500/30 rounded-xl">
+                <div className="flex items-center justify-between">
+                  <span className="text-sm text-emerald-300 font-semibold">Free to Spend</span>
+                  <span className="text-lg font-bold text-emerald-400">${Math.max(0, (parseFloat(newAvailableFunds) || 0) - (parseFloat(newSavingsGoal) || 0)).toFixed(2)}</span>
+                </div>
+              </div>
+              <div className="flex gap-3">
                 <button onClick={onClose} className="flex-1 bg-slate-700 hover:bg-slate-600 text-white py-3 rounded-xl font-semibold transition-all">Cancel</button>
                 <button onClick={() => { onUpdateFunds(newSavingsGoal, newAvailableFunds); onClose(); }} className="flex-1 bg-gradient-to-r from-teal-600 to-cyan-600 hover:from-teal-700 hover:to-cyan-700 text-white py-3 rounded-xl font-semibold transition-all">Save Changes</button>
               </div>
@@ -458,23 +269,12 @@
     const MakePaymentModal = memo(({ isOpen, onClose, cards, onMakePayment }) => {
       const [selectedCard, setSelectedCard] = useState('');
       const [paymentAmount, setPaymentAmount] = useState('');
-
-      const handlePayment = useCallback(() => {
-        if (selectedCard && paymentAmount && parseFloat(paymentAmount) > 0) {
-          onMakePayment(selectedCard, parseFloat(paymentAmount));
-          setSelectedCard('');
-          setPaymentAmount('');
-          onClose();
-        }
-      }, [selectedCard, paymentAmount, onMakePayment, onClose]);
-
+      const handlePayment = useCallback(() => { if (selectedCard && paymentAmount && parseFloat(paymentAmount) > 0) { onMakePayment(selectedCard, parseFloat(paymentAmount)); setSelectedCard(''); setPaymentAmount(''); onClose(); } }, [selectedCard, paymentAmount, onMakePayment, onClose]);
       const selectedCardData = useMemo(() => cards.find(c => c.id === selectedCard), [cards, selectedCard]);
-
       return (
         <Modal isOpen={isOpen} onClose={onClose} title="Make a Payment">
           <div className="p-6 space-y-4">
-            <div>
-              <label className="text-sm text-slate-300 mb-2 block">Select Card</label>
+            <div><label className="text-sm text-slate-300 mb-2 block">Select Card</label>
               <select value={selectedCard} onChange={(e) => setSelectedCard(e.target.value)} className="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-3 text-white">
                 <option value="">Choose...</option>
                 {cards.map(card => <option key={card.id} value={card.id}>{card.name} - ${parseFloat(card.balance).toFixed(2)}</option>)}
@@ -504,7 +304,6 @@
       const [calculatorBudget, setCalculatorBudget] = useState(monthlyBudget);
       useEffect(() => { setCalculatorBudget(monthlyBudget); }, [monthlyBudget]);
       const timeline = useMemo(() => calculatePayoffTimeline(cards, parseFloat(calculatorBudget) || 0), [cards, calculatorBudget]);
-
       return (
         <Modal isOpen={isOpen} onClose={onClose} title="Payoff Calculator">
           <div className="p-6 space-y-6">
@@ -546,83 +345,40 @@
     const InsightsModal = memo(({ isOpen, onClose, cards, stats }) => {
       const highestAPR = useMemo(() => cards.length ? cards.reduce((h, c) => (parseFloat(c.apr) > parseFloat(h.apr) ? c : h)) : null, [cards]);
       const highestBalance = useMemo(() => cards.length ? cards.reduce((h, c) => (parseFloat(c.balance) > parseFloat(h.balance) ? c : h)) : null, [cards]);
-      const highestUtil = useMemo(() => cards.length ? cards.reduce((h, c) => {
-        const util = parseFloat(c.creditLimit) > 0 ? (parseFloat(c.balance) / parseFloat(c.creditLimit)) * 100 : 0;
-        const hUtil = parseFloat(h.creditLimit) > 0 ? (parseFloat(h.balance) / parseFloat(h.creditLimit)) * 100 : 0;
-        return util > hUtil ? c : h;
-      }) : null, [cards]);
-
+      const highestUtil = useMemo(() => cards.length ? cards.reduce((h, c) => { const util = parseFloat(c.creditLimit) > 0 ? (parseFloat(c.balance) / parseFloat(c.creditLimit)) * 100 : 0; const hUtil = parseFloat(h.creditLimit) > 0 ? (parseFloat(h.balance) / parseFloat(h.creditLimit)) * 100 : 0; return util > hUtil ? c : h; }) : null, [cards]);
       const today = new Date();
       const currentMonth = today.getMonth();
       const currentYear = today.getFullYear();
       const daysInMonth = new Date(currentYear, currentMonth + 1, 0).getDate();
       const firstDayOfMonth = new Date(currentYear, currentMonth, 1).getDay();
-      
-      const calendarDates = useMemo(() => {
-        const dates = [];
-        for (let i = 0; i < firstDayOfMonth; i++) dates.push(null);
-        for (let i = 1; i <= daysInMonth; i++) dates.push(i);
-        return dates;
-      }, [firstDayOfMonth, daysInMonth]);
-
+      const calendarDates = useMemo(() => { const dates = []; for (let i = 0; i < firstDayOfMonth; i++) dates.push(null); for (let i = 1; i <= daysInMonth; i++) dates.push(i); return dates; }, [firstDayOfMonth, daysInMonth]);
       const getEventsForDay = useCallback((day) => {
         if (!day) return [];
         const events = [];
         cards.forEach((card, idx) => {
-          if (card.dueDate) {
-            const dueDate = new Date(card.dueDate);
-            if (dueDate.getMonth() === currentMonth && dueDate.getFullYear() === currentYear && dueDate.getDate() === day) {
-              events.push({ type: 'due', card: card.name, color: getCardColor(idx), cardIndex: idx });
-            }
-          }
-          if (card.closeDate) {
-            const closeDate = new Date(card.closeDate);
-            if (closeDate.getMonth() === currentMonth && closeDate.getFullYear() === currentYear && closeDate.getDate() === day) {
-              events.push({ type: 'close', card: card.name, color: getCardColor(idx), cardIndex: idx });
-            }
-          }
+          if (card.dueDate) { const dueDate = new Date(card.dueDate); if (dueDate.getMonth() === currentMonth && dueDate.getFullYear() === currentYear && dueDate.getDate() === day) events.push({ type: 'due', card: card.name, color: getCardColor(idx) }); }
+          if (card.closeDate) { const closeDate = new Date(card.closeDate); if (closeDate.getMonth() === currentMonth && closeDate.getFullYear() === currentYear && closeDate.getDate() === day) events.push({ type: 'close', card: card.name, color: getCardColor(idx) }); }
         });
         return events;
       }, [cards, currentMonth, currentYear]);
-
-      const monthNames = ['January', 'February', 'March', 'April', 'May', 'June', 'July', 'August', 'September', 'October', 'November', 'December'];
-
+      const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
       return (
         <Modal isOpen={isOpen} onClose={onClose} title="Insights">
           <div className="p-4 sm:p-6 space-y-6">
-            <div className="bg-slate-900/50 rounded-2xl p-5 border border-slate-700/50">
-              <div className="space-y-3">
-                <div className="flex justify-between items-center"><span className="text-slate-400 text-sm">Total Debt</span><span className="text-white font-semibold text-lg">${stats.totalDebt.toFixed(2)}</span></div>
-                <div className="flex justify-between items-center"><span className="text-slate-400 text-sm">Monthly Interest</span><span className="text-amber-400 font-semibold text-lg">${stats.totalMonthlyInterest.toFixed(2)}</span></div>
-                <div className="flex justify-between items-center"><span className="text-slate-400 text-sm">Yearly Cost</span><span className="text-rose-400 font-semibold text-lg">${(stats.totalMonthlyInterest * 12).toFixed(2)}</span></div>
-                <div className="flex justify-between items-center"><span className="text-slate-400 text-sm">Credit Utilization</span><span className={`font-semibold text-lg ${stats.overallUtilization > 30 ? 'text-rose-400' : 'text-teal-400'}`}>{stats.overallUtilization.toFixed(1)}%</span></div>
-              </div>
+            <div className="bg-slate-900/50 rounded-2xl p-5 border border-slate-700/50 space-y-3">
+              <div className="flex justify-between items-center"><span className="text-slate-400 text-sm">Total Debt</span><span className="text-white font-semibold text-lg">${stats.totalDebt.toFixed(2)}</span></div>
+              <div className="flex justify-between items-center"><span className="text-slate-400 text-sm">Monthly Interest</span><span className="text-amber-400 font-semibold text-lg">${stats.totalMonthlyInterest.toFixed(2)}</span></div>
+              <div className="flex justify-between items-center"><span className="text-slate-400 text-sm">Yearly Cost</span><span className="text-rose-400 font-semibold text-lg">${(stats.totalMonthlyInterest * 12).toFixed(2)}</span></div>
+              <div className="flex justify-between items-center"><span className="text-slate-400 text-sm">Credit Utilization</span><span className={`font-semibold text-lg ${stats.overallUtilization > 30 ? 'text-rose-400' : 'text-teal-400'}`}>{stats.overallUtilization.toFixed(1)}%</span></div>
             </div>
             {highestAPR && <div className="bg-gradient-to-br from-rose-500/10 to-rose-600/5 rounded-2xl p-5 border border-rose-500/20"><div className="flex items-start justify-between mb-3"><h3 className="font-semibold text-rose-300">Highest APR</h3><span className="text-xs text-rose-400/60">⚠️</span></div><div className="text-white font-semibold mb-1">{highestAPR.name}</div><div className="text-rose-400 text-3xl font-bold">{parseFloat(highestAPR.apr).toFixed(2)}%</div><div className="text-xs text-slate-400 mt-2">Priority target for payoff</div></div>}
             {highestBalance && <div className="bg-gradient-to-br from-blue-500/10 to-blue-600/5 rounded-2xl p-5 border border-blue-500/20"><div className="flex items-start justify-between mb-3"><h3 className="font-semibold text-blue-300">Largest Balance</h3><span className="text-xs text-blue-400/60">💰</span></div><div className="text-white font-semibold mb-1">{highestBalance.name}</div><div className="text-blue-400 text-3xl font-bold">${parseFloat(highestBalance.balance).toFixed(2)}</div></div>}
             {highestUtil && parseFloat(highestUtil.creditLimit) > 0 && <div className="bg-gradient-to-br from-amber-500/10 to-amber-600/5 rounded-2xl p-5 border border-amber-500/20"><div className="flex items-start justify-between mb-3"><h3 className="font-semibold text-amber-300">Highest Utilization</h3><span className="text-xs text-amber-400/60">📊</span></div><div className="text-white font-semibold mb-1">{highestUtil.name}</div><div className="text-amber-400 text-3xl font-bold">{((parseFloat(highestUtil.balance) / parseFloat(highestUtil.creditLimit)) * 100).toFixed(1)}%</div><div className="text-xs text-slate-400 mt-2">Keep under 30% for better score</div></div>}
             <div className="bg-gradient-to-br from-teal-500/10 to-teal-600/5 rounded-2xl p-5 border border-teal-500/20"><h3 className="font-semibold text-teal-300 mb-4 flex items-center gap-2"><span>💡</span> Financial Tips</h3><ul className="space-y-2.5 text-sm text-slate-300"><li className="flex items-start gap-2"><span className="text-teal-400 mt-0.5">•</span><span>Pay more than the minimum to reduce interest</span></li><li className="flex items-start gap-2"><span className="text-teal-400 mt-0.5">•</span><span>Keep utilization below 30% on all cards</span></li><li className="flex items-start gap-2"><span className="text-teal-400 mt-0.5">•</span><span>Consider balance transfers for high APR cards</span></li><li className="flex items-start gap-2"><span className="text-teal-400 mt-0.5">•</span><span>Set up automatic payments to avoid fees</span></li></ul></div>
-            {cards.length > 0 && (
-              <div className="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50">
-                <h3 className="text-sm font-semibold text-slate-400 mb-3">Your Cards</h3>
-                <div className="grid grid-cols-2 gap-2">
-                  {cards.map((card, idx) => {
-                    const color = getCardColor(idx);
-                    return (<div key={card.id} className="flex items-center gap-2"><div className={`w-3 h-3 rounded-full ${color.bg}`}></div><span className="text-xs text-slate-300 truncate">{card.name}</span></div>);
-                  })}
-                </div>
-              </div>
-            )}
+            {cards.length > 0 && <div className="bg-slate-900/50 rounded-2xl p-4 border border-slate-700/50"><h3 className="text-sm font-semibold text-slate-400 mb-3">Your Cards</h3><div className="grid grid-cols-2 gap-2">{cards.map((card, idx) => { const color = getCardColor(idx); return (<div key={card.id} className="flex items-center gap-2"><div className={`w-3 h-3 rounded-full ${color.bg}`}></div><span className="text-xs text-slate-300 truncate">{card.name}</span></div>); })}</div></div>}
             <div className="bg-gradient-to-b from-slate-900/80 to-slate-900/50 rounded-3xl p-6 border border-slate-700/30 shadow-2xl">
-              <div className="mb-6">
-                <h3 className="text-2xl font-semibold text-white mb-1">{monthNames[currentMonth]}</h3>
-                <p className="text-slate-400 text-sm">{currentYear}</p>
-              </div>
-              <div className="grid grid-cols-7 gap-2 mb-3">
-                {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((day, i) => (
-                  <div key={i} className="text-center text-xs font-medium text-slate-500 pb-2">{day}</div>
-                ))}
-              </div>
+              <div className="mb-6"><h3 className="text-2xl font-semibold text-white mb-1">{monthNames[currentMonth]}</h3><p className="text-slate-400 text-sm">{currentYear}</p></div>
+              <div className="grid grid-cols-7 gap-2 mb-3">{['S','M','T','W','T','F','S'].map((day, i) => (<div key={i} className="text-center text-xs font-medium text-slate-500 pb-2">{day}</div>))}</div>
               <div className="grid grid-cols-7 gap-2">
                 {calendarDates.map((day, idx) => {
                   const events = getEventsForDay(day);
@@ -632,13 +388,7 @@
                       {day ? (
                         <div className={`w-full h-full flex flex-col items-center justify-center rounded-2xl transition-all duration-200 ${isToday ? 'bg-cyan-500 shadow-lg shadow-cyan-500/30' : events.length > 0 ? 'bg-slate-800/80 hover:bg-slate-700/80' : 'hover:bg-slate-800/40'}`}>
                           <span className={`text-sm font-medium ${isToday ? 'text-white' : events.length > 0 ? 'text-white' : 'text-slate-400'}`}>{day}</span>
-                          {events.length > 0 && (
-                            <div className="flex gap-0.5 mt-1 flex-wrap justify-center">
-                              {events.map((event, i) => (
-                                <div key={i} className={`w-1.5 h-1.5 rounded-full ${event.color.bg}`} title={`${event.card} - ${event.type === 'due' ? 'Payment Due' : 'Statement Close'}`}></div>
-                              ))}
-                            </div>
-                          )}
+                          {events.length > 0 && <div className="flex gap-0.5 mt-1 flex-wrap justify-center">{events.map((event, i) => (<div key={i} className={`w-1.5 h-1.5 rounded-full ${event.color.bg}`}></div>))}</div>}
                         </div>
                       ) : (<div className="w-full h-full"></div>)}
                     </div>
@@ -695,8 +445,8 @@
           <div className="bg-slate-800 rounded-2xl shadow-2xl border border-slate-700 w-full max-w-2xl max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-6 border-b border-slate-700"><h2 className="text-xl font-bold text-white">📤 Export Backup</h2><button onClick={onClose} className="text-slate-400 hover:text-white p-2 rounded-lg transition-colors"><Icon name="x" size={24} /></button></div>
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
-              <p className="text-slate-300 text-sm mb-2">✅ Copy this text and save it in your Notes app.</p>
-              <p className="text-slate-400 text-xs mb-4">💡 To restore: Copy from Notes → Click Import → Paste</p>
+              <p className="text-slate-300 text-sm mb-2">✅ Your backup is ready! Copy this text and save it in your Notes app.</p>
+              <p className="text-slate-400 text-xs mb-4">💡 To restore later: Copy from Notes → Click Import → Paste</p>
               <div className="relative">
                 <textarea value={data} readOnly onClick={(e) => e.target.select()} className="w-full h-64 bg-slate-900/50 border border-slate-700 rounded-xl p-4 text-slate-300 text-xs font-mono resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500" placeholder="Backup data..." />
                 <div className="absolute top-2 right-2"><button onClick={handleCopy} className={`${copied ? 'bg-emerald-600' : 'bg-slate-700 hover:bg-slate-600'} text-white px-3 py-1.5 rounded-lg text-xs font-semibold transition-all`}>{copied ? '✅ Copied!' : '📋 Copy'}</button></div>
@@ -714,14 +464,14 @@
     const ImportModal = memo(({ isOpen, onClose, onImport }) => {
       const [pasteData, setPasteData] = useState('');
       const [error, setError] = useState('');
-      const handlePaste = async () => { try { const text = await navigator.clipboard.readText(); setPasteData(text); setError(''); } catch { setError('Could not read clipboard. Please paste manually.'); } };
+      const handlePaste = async () => { try { const text = await navigator.clipboard.readText(); setPasteData(text); setError(''); } catch { setError('📋 Could not read clipboard. Please paste manually into the box below.'); } };
       const handleImport = () => {
-        if (!pasteData.trim()) { setError('Please paste your backup data first.'); return; }
+        if (!pasteData.trim()) { setError('⚠️ Please paste your backup data first.'); return; }
         try {
           const data = JSON.parse(pasteData);
-          if (!data.cards && !data.savingsGoal && !data.paymentHistory) { setError('Invalid backup data.'); return; }
+          if (!data.cards && !data.savingsGoal && !data.paymentHistory) { setError('⚠️ Invalid backup data.'); return; }
           onImport(data); setPasteData(''); setError(''); onClose();
-        } catch { setError('Invalid backup format. Please try again.'); }
+        } catch { setError('❌ Invalid backup format. Please try again.'); }
       };
       const handleClose = () => { setPasteData(''); setError(''); onClose(); };
       if (!isOpen) return null;
@@ -730,10 +480,11 @@
           <div className="bg-slate-800 rounded-2xl shadow-2xl border border-slate-700 w-full max-w-2xl max-h-[90vh] overflow-hidden" onClick={(e) => e.stopPropagation()}>
             <div className="flex items-center justify-between p-6 border-b border-slate-700"><h2 className="text-xl font-bold text-white">📥 Import Backup</h2><button onClick={handleClose} className="text-slate-400 hover:text-white p-2 rounded-lg transition-colors"><Icon name="x" size={24} /></button></div>
             <div className="p-6 overflow-y-auto max-h-[calc(90vh-180px)]">
-              <p className="text-slate-300 text-sm mb-4">Paste your backup data below to restore your cards and funds.</p>
+              <p className="text-slate-300 text-sm mb-2">📋 Paste your backup data from Notes app below to restore your cards and funds.</p>
+              <p className="text-slate-400 text-xs mb-4">💡 Copy the backup from Notes → Paste here → Click Restore</p>
               <textarea value={pasteData} onChange={(e) => { setPasteData(e.target.value); setError(''); }} placeholder="Paste your backup data here..." className="w-full h-64 bg-slate-900/50 border border-slate-700 rounded-xl p-4 text-slate-300 text-xs font-mono resize-none focus:outline-none focus:ring-2 focus:ring-cyan-500" />
               {error && <div className="mt-3 p-3 bg-rose-500/10 border border-rose-500/30 rounded-lg text-rose-300 text-sm">{error}</div>}
-              {pasteData && !error && <div className="mt-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-300 text-sm">✅ Data detected! Click Restore to import.</div>}
+              {pasteData && !error && <div className="mt-3 p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg text-emerald-300 text-sm">✅ Backup data detected! Click "Restore Data" to import.</div>}
             </div>
             <div className="flex gap-3 p-6 pt-0">
               <button onClick={handlePaste} className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-3 rounded-xl font-semibold transition-all">📋 Paste from Clipboard</button>
@@ -748,19 +499,12 @@
     const CardItem = memo(({ card, index, onToggle, isExpanded, onDelete, showDeleteConfirm, onConfirmDelete }) => {
       const [isEditingBalance, setIsEditingBalance] = useState(false);
       const [editBalance, setEditBalance] = useState(card.balance);
-      
       const minPayment = useMemo(() => calculateMinPayment(card.balance, card.apr, card.issuer), [card.balance, card.apr, card.issuer]);
-      const monthlyInterest = useMemo(() => {
-        const balance = parseFloat(card.balance) || 0;
-        const apr = parseFloat(card.apr) || 0;
-        return balance * (apr / 100) / 12;
-      }, [card.balance, card.apr]);
-      
+      const monthlyInterest = useMemo(() => { const balance = parseFloat(card.balance) || 0; const apr = parseFloat(card.apr) || 0; return balance * (apr / 100) / 12; }, [card.balance, card.apr]);
       const creditLimit = parseFloat(card.creditLimit) || 0;
       const cardBalance = parseFloat(card.balance) || 0;
       const utilization = useMemo(() => creditLimit > 0 ? ((cardBalance / creditLimit) * 100) : 0, [creditLimit, cardBalance]);
       const cardColor = getCardColor(index);
-
       return (
         <div className="bg-gradient-to-br from-slate-900/98 to-slate-800/98 backdrop-blur-xl rounded-2xl shadow-xl overflow-hidden border border-cyan-500/15 hover:border-cyan-500/25 transition-all">
           <div className="bg-slate-900/50 px-5 py-4 border-b border-slate-700/50">
@@ -771,20 +515,22 @@
                   <div className="font-semibold text-slate-100 truncate">{card.name}</div>
                   <div className="text-slate-400 text-xs flex items-center gap-2">
                     <span>{card.apr}% APR</span>
-                    {card.dueDate && (() => {
-                      const today = new Date();
-                      const due = new Date(card.dueDate);
-                      const diffDays = Math.ceil((due - today) / (1000 * 60 * 60 * 24));
-                      if (diffDays >= 0 && diffDays <= 7) return <span className="text-rose-400 font-semibold">• Due in {diffDays}d</span>;
-                      if (diffDays > 7 && diffDays <= 14) return <span className="text-amber-400">• Due in {diffDays}d</span>;
-                      return null;
-                    })()}
+                    {card.dueDate && (() => { const today = new Date(); const due = new Date(card.dueDate); const diffDays = Math.ceil((due - today) / (1000 * 60 * 60 * 24)); if (diffDays >= 0 && diffDays <= 7) return <span className="text-rose-400 font-semibold">• Due in {diffDays}d</span>; if (diffDays > 7 && diffDays <= 14) return <span className="text-amber-400">• Due in {diffDays}d</span>; return null; })()}
                   </div>
                 </div>
               </div>
               <button className="text-slate-400 hover:text-slate-300 p-2 rounded-lg transition-colors" onClick={() => onToggle(card.id)}>{isExpanded ? <Icon name="chevron-up" size={20} /> : <Icon name="chevron-down" size={20} />}</button>
             </div>
-            <div className="text-3xl font-bold text-white mb-2">${formatCurrency(cardBalance)}</div>
+            <div className="text-3xl font-bold text-white mb-2 cursor-pointer" onClick={(e) => { e.stopPropagation(); setIsEditingBalance(true); }}>
+              {isEditingBalance ? (
+                <input type="number" value={editBalance} onChange={(e) => setEditBalance(e.target.value)}
+                  onBlur={() => { if (validateNumber(editBalance, 0)) { card.balance = parseFloat(editBalance).toFixed(2); window.dispatchEvent(new Event('storage')); } setIsEditingBalance(false); }}
+                  onKeyDown={(e) => { if (e.key === 'Enter') { if (validateNumber(editBalance, 0)) { card.balance = parseFloat(editBalance).toFixed(2); window.dispatchEvent(new Event('storage')); } setIsEditingBalance(false); } }}
+                  autoFocus className="w-full bg-slate-800 border-2 border-cyan-500 rounded-lg px-2 py-1 text-white text-3xl font-bold focus:outline-none" step="0.01" />
+              ) : (
+                <span>${formatCurrency(cardBalance)}</span>
+              )}
+            </div>
             {utilization > 0 && creditLimit > 0 && (
               <div className="mt-2">
                 <div className="flex items-center justify-between text-xs mb-1"><span className="text-slate-400 truncate">Using ${cardBalance.toFixed(2)} of ${creditLimit.toFixed(2)}</span><span className={`font-semibold ml-2 ${utilization > 30 ? 'text-rose-400' : 'text-teal-400'}`}>{utilization.toFixed(1)}%</span></div>
@@ -802,15 +548,7 @@
                 <div className="mb-4 p-4 bg-blue-500/10 rounded-xl border border-blue-500/20">
                   <div className="text-xs text-blue-300 mb-1">If Paid Minimum Only</div>
                   <div className="font-bold text-blue-100 text-lg">
-                    {(() => {
-                      let balance = cardBalance, months = 0;
-                      const apr = parseFloat(card.apr) || 0;
-                      const monthlyRate = (apr / 100) / 12;
-                      const minPay = parseFloat(minPayment);
-                      while (balance > 0.01 && months < 600) { const interest = balance * monthlyRate; balance += interest; const payment = Math.min(minPay, balance); balance -= payment; months++; }
-                      const years = Math.floor(months / 12), rem = months % 12;
-                      return years > 0 ? `${years}y ${rem}m` : `${rem}m`;
-                    })()}
+                    {(() => { let balance = cardBalance, months = 0, rate = (parseFloat(card.apr)||0)/100/12, minPay = parseFloat(minPayment); while (balance > 0.01 && months < 600) { const interest = balance * rate; balance += interest; const payment = Math.min(minPay, balance); balance -= payment; months++; } const years = Math.floor(months/12), rem = months%12; return years > 0 ? `${years}y ${rem}m` : `${rem}m`; })()}
                   </div>
                 </div>
               )}
@@ -821,10 +559,6 @@
         </div>
       );
     });
-
-    // ============================================================================
-    // MAIN APP
-    // ============================================================================
 
     function DebtGone() {
       const [cards, setCards] = useLocalStorage('debt-gone-cards', []);
@@ -847,14 +581,9 @@
       const [notification, setNotification] = useState(null);
       const [newCard, setNewCard] = useState({ name: '', balance: '', creditLimit: '', apr: '', issuer: 'chase', dueDate: '', closeDate: '' });
 
-      useEffect(() => {
-        lucide.createIcons();
-      }, [showQuickEdit, showFundsManager, showMakePayment, showCalculator, showInsights, showHistory, showExportModal, showImportModal, isAdding, expandedCard, cards.length]);
+      useEffect(() => { lucide.createIcons(); }, [showQuickEdit, showFundsManager, showMakePayment, showCalculator, showInsights, showHistory, showExportModal, showImportModal, isAdding, expandedCard, cards.length]);
 
-      const showNotification = useCallback((message, type = 'success') => {
-        setNotification({ message, type });
-        setTimeout(() => setNotification(null), 3000);
-      }, []);
+      const showNotification = useCallback((message, type = 'success') => { setNotification({ message, type }); setTimeout(() => setNotification(null), 3000); }, []);
 
       const stats = useMemo(() => {
         const totalDebt = cards.reduce((s, c) => s + parseFloat(c.balance || 0), 0);
@@ -869,20 +598,15 @@
         const updatedCards = cards.map(card => {
           const newBalance = parseFloat(newBalances[card.id]) || 0;
           const oldBalance = parseFloat(card.balance) || 0;
-          if (newBalance !== oldBalance && newBalance < oldBalance) {
-            setPaymentHistory(prev => [{ id: Date.now() + Math.random(), cardName: card.name, oldBalance, newBalance, amount: oldBalance - newBalance, date: new Date().toISOString() }, ...prev]);
-          }
+          if (newBalance !== oldBalance && newBalance < oldBalance) setPaymentHistory(prev => [{ id: Date.now() + Math.random(), cardName: card.name, oldBalance, newBalance, amount: oldBalance - newBalance, date: new Date().toISOString() }, ...prev]);
           return { ...card, balance: newBalance.toFixed(2) };
         });
-        setCards(updatedCards);
-        showNotification('Balances updated!');
+        setCards(updatedCards); showNotification('Balances updated!');
       }, [cards, setCards, setPaymentHistory, showNotification]);
 
       const handleMakePayment = useCallback((cardId, amount) => {
-        const card = cards.find(c => c.id === cardId);
-        if (!card) return;
-        const oldBalance = parseFloat(card.balance);
-        const newBalance = Math.max(0, oldBalance - amount);
+        const card = cards.find(c => c.id === cardId); if (!card) return;
+        const oldBalance = parseFloat(card.balance), newBalance = Math.max(0, oldBalance - amount);
         setCards(prev => prev.map(c => c.id === cardId ? { ...c, balance: newBalance.toFixed(2) } : c));
         setPaymentHistory(prev => [{ id: Date.now(), cardName: card.name, oldBalance, newBalance, amount, date: new Date().toISOString() }, ...prev]);
         showNotification(`Payment of $${amount.toFixed(2)} recorded!`);
@@ -890,26 +614,17 @@
 
       const handleAddCard = useCallback(() => {
         const { name, balance, apr, creditLimit, issuer, dueDate, closeDate } = newCard;
-        if (!name.trim() || !validateNumber(balance, 0) || !validateNumber(apr, 0)) {
-          showNotification('Please fill all required fields', 'error');
-          return;
-        }
+        if (!name.trim() || !validateNumber(balance, 0) || !validateNumber(apr, 0)) { showNotification('Please fill all required fields', 'error'); return; }
         setCards(prev => [...prev, { id: Date.now(), name: name.trim(), balance: parseFloat(balance).toFixed(2), creditLimit: creditLimit ? parseFloat(creditLimit).toFixed(2) : '0', apr: parseFloat(apr).toFixed(2), issuer, dueDate, closeDate }]);
         setNewCard({ name: '', balance: '', creditLimit: '', apr: '', issuer: 'chase', dueDate: '', closeDate: '' });
-        setIsAdding(false);
-        showNotification('Card added!');
+        setIsAdding(false); showNotification('Card added!');
       }, [newCard, setCards, showNotification]);
 
-      const handleDeleteCard = useCallback((id) => {
-        setCards(prev => prev.filter(c => c.id !== id));
-        setShowDeleteConfirm(null);
-        showNotification('Card removed');
-      }, [setCards, showNotification]);
+      const handleDeleteCard = useCallback((id) => { setCards(prev => prev.filter(c => c.id !== id)); setShowDeleteConfirm(null); showNotification('Card removed'); }, [setCards, showNotification]);
 
       const handleExport = useCallback(() => {
         const data = JSON.stringify({ cards, monthlyPaymentBudget, paymentHistory, savingsGoal, availableFunds, exportDate: new Date().toISOString(), version: '2.2' }, null, 2);
-        setExportData(data);
-        setShowExportModal(true);
+        setExportData(data); setShowExportModal(true);
       }, [cards, monthlyPaymentBudget, paymentHistory, savingsGoal, availableFunds]);
 
       const handleImportData = useCallback((data) => {
@@ -927,7 +642,7 @@
         <div className="min-h-screen bg-gradient-to-br from-slate-950 via-slate-900 to-blue-950/20 scroll-smooth">
           {notification && <Notification message={notification.message} type={notification.type} />}
           <QuickEditModal isOpen={showQuickEdit} onClose={() => setShowQuickEdit(false)} cards={cards} onUpdateBalances={handleUpdateBalances} />
-          <FundsManagerModal isOpen={showFundsManager} onClose={() => setShowFundsManager(false)} currentFunds={savingsGoal} availableFunds={availableFunds} onUpdateFunds={(newSavings, newAvailable) => { setSavingsGoal(newSavings); setAvailableFunds(newAvailable); showNotification('Account balance updated!'); }} />
+          <FundsManagerModal isOpen={showFundsManager} onClose={() => setShowFundsManager(false)} currentFunds={savingsGoal} availableFunds={availableFunds} onUpdateFunds={(ns, na) => { setSavingsGoal(ns); setAvailableFunds(na); showNotification('Account balance updated!'); }} />
           <MakePaymentModal isOpen={showMakePayment} onClose={() => setShowMakePayment(false)} cards={cards} onMakePayment={handleMakePayment} />
           <PayoffCalculatorModal isOpen={showCalculator} onClose={() => setShowCalculator(false)} cards={cards} monthlyBudget={monthlyPaymentBudget} setMonthlyBudget={setMonthlyPaymentBudget} totalMinPayment={stats.totalMinPayment} />
           <InsightsModal isOpen={showInsights} onClose={() => setShowInsights(false)} cards={cards} stats={stats} />
